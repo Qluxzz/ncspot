@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use cursive::view::ViewWrapper;
 use cursive::Cursive;
 
-use crate::command::Command;
+use crate::{command::Command, playlist::Sorting};
 use crate::commands::CommandResult;
 use crate::library::Library;
 use crate::playlist::Playlist;
@@ -33,6 +33,10 @@ impl PlaylistView {
 
         let spotify = queue.get_spotify();
         let list = ListView::new(Arc::new(RwLock::new(tracks)), queue, library.clone());
+
+        if let Some(ref sort_order) = playlist.sort_order {
+            list.sort(&sort_order.key, &sort_order.direction)
+        }
 
         Self {
             playlist,
@@ -74,7 +78,13 @@ impl ViewExt for PlaylistView {
 
         if let Command::Sort(key, direction) = cmd {
             self.list.sort(key, direction);
-            return Ok(CommandResult::Consumed(None))
+            self.playlist.sort_order = Some(Sorting{
+                key: key.clone(),
+                direction: direction.clone()
+            });
+            self.library.playlist_update(&self.playlist);
+
+            return Ok(CommandResult::Consumed(None));
         }
 
         self.list.on_command(s, cmd)

@@ -3,13 +3,19 @@ use std::sync::Arc;
 
 use rspotify::model::playlist::{FullPlaylist, SimplifiedPlaylist};
 
-use crate::library::Library;
+use crate::{command::SortKey, library::Library, command::SortDirection};
 use crate::playable::Playable;
 use crate::queue::Queue;
 use crate::spotify::Spotify;
 use crate::track::Track;
 use crate::traits::{IntoBoxedViewExt, ListItem, ViewExt};
 use crate::ui::playlist::PlaylistView;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Sorting {
+    pub key: SortKey,
+    pub direction: SortDirection
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Playlist {
@@ -19,7 +25,8 @@ pub struct Playlist {
     pub snapshot_id: String,
     pub num_tracks: usize,
     pub tracks: Option<Vec<Track>>,
-    pub collaborative: bool
+    pub collaborative: bool,
+    pub sort_order: Option<Sorting>
 }
 
 impl Playlist {
@@ -130,6 +137,7 @@ impl From<&SimplifiedPlaylist> for Playlist {
             num_tracks,
             tracks: None,
             collaborative: list.collaborative,
+            sort_order: None
         }
     }
 }
@@ -143,7 +151,8 @@ impl From<&FullPlaylist> for Playlist {
             snapshot_id: list.snapshot_id.clone(),
             num_tracks: list.tracks.total as usize,
             tracks: None,
-            collaborative: list.collaborative
+            collaborative: list.collaborative,
+            sort_order: None
         }
     }
 }
