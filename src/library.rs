@@ -116,7 +116,9 @@ impl Library {
         let mut store = self.playlists.write().expect("can't writelock playlists");
         for (index, local) in store.iter_mut().enumerate() {
             if local.id == updated.id {
+                let sort_order = local.sort_order.clone();
                 *local = updated.clone();
+                local.sort_order = sort_order;
                 return index;
             }
         }
