@@ -7,9 +7,11 @@ use notify_rust::Notification;
 use rand::prelude::*;
 use strum_macros::Display;
 
-use crate::playable::Playable;
-use crate::spotify::Spotify;
+use crate::{config, spotify::Spotify};
 use crate::{config::Config, spotify::PlayerEvent};
+use crate::{playable::Playable, track::Track};
+
+const CACHE_QUEUE: &str = "queue.db";
 
 #[derive(Display, Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum RepeatSetting {
@@ -25,6 +27,12 @@ pub struct Queue {
     repeat: RwLock<RepeatSetting>,
     spotify: Arc<Spotify>,
     cfg: Arc<Config>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct QueueCacheInfo {
+    pub track_ids: Vec<String>,
+    pub current_track_index: usize,
 }
 
 impl Queue {
@@ -375,5 +383,66 @@ impl Queue {
 
     pub fn get_spotify(&self) -> Arc<Spotify> {
         self.spotify.clone()
+    }
+
+    pub fn save_queue(&self) {
+        let cache_path = config::cache_path(CACHE_QUEUE);
+        let queue = self.queue.read().unwrap().clone();
+
+        let cache_info = QueueCacheInfo {
+            track_ids: queue.iter().map(|t| t.id().unwrap()).collect(),
+            current_track_index: self.current_track.read().unwrap().unwrap(),
+        };
+
+        match serde_json::to_string(&cache_info) {
+            Ok(contents) => std::fs::write(cache_path, contents).unwrap(),
+            Err(e) => error!("could not write cache: {:?}", e),
+        }
+    }
+
+    pub fn load_queue(&self) {
+        let mut queue = self
+            .queue
+            .write()
+            .expect("Failed to get write lock on queue");
+
+        let cache_path = config::cache_path(CACHE_QUEUE);
+
+        std::fs::read_to_string(cache_path)
+            .ok()
+            .and_then(|contents| serde_json::from_str(&contents).ok())
+            .and_then(|queue_cache| {
+                let queue_cache: QueueCacheInfo = queue_cache;
+
+                let mut tracks = Vec::new();
+                let mut iter = queue_cache.track_ids.iter().peekable();
+                let iter = iter.by_ref();
+
+                let spotify = self.spotify.clone();
+
+                while iter.peek().is_some() {
+                    let ids = iter.take(50);
+                    let t: Option<Vec<Playable>> = spotify
+                        .tracks(ids.map(|id| id.as_str()).collect())
+                        .map(|tracks| {
+                            tracks
+                                .tracks
+                                .iter()
+                                .map(|track| Playable::Track(Track::from(track)))
+                                .collect()
+                        });
+
+                    if let Some(t) = t {
+                        tracks.extend(t);
+                    }
+                    break;
+                }
+
+                queue.clear();
+                queue.extend(tracks);
+                *self.current_track.write().unwrap() = Some(queue_cache.current_track_index - 1);
+
+                Some(())
+            });
     }
 }
