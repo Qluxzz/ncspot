@@ -43,23 +43,26 @@ impl Artist {
         }
 
         if let Some(ref artist_id) = self.id {
-            if let Some(sas) = spotify.artist_albums(artist_id, 50, 0) {
-                let mut albums: Vec<Album> = Vec::new();
-
-                for sa in sas.items {
+            let mut albums = Vec::new();
+            let mut artist_albums = spotify.artist_albums(artist_id, 50, 0);
+            while let Some(page) = artist_albums {
+                for sa in &page.items {
                     if Some("appears_on".into()) == sa.album_group {
                         continue;
                     }
 
-                    if let Some(album_id) = sa.id {
-                        if let Some(fa) = spotify.full_album(&album_id).as_ref() {
-                            albums.push(fa.into());
-                        }
-                    }
+                    albums.push(sa.into());
                 }
 
-                self.albums = Some(albums);
+                artist_albums = match page.next {
+                    Some(_) => {
+                        spotify.artist_albums(artist_id, 50, page.offset + page.items.len() as u32)
+                    }
+                    None => None,
+                }
             }
+
+            self.albums = Some(albums);
         }
     }
 
